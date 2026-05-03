@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>microGPT in your browser — WebAssembly</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --muted: #555;
+    --accent: #0a66c2;
+    --bg: #fafafa;
+    --card: #fff;
+    --border: #e2e2e2;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 28px 24px 80px;
+    line-height: 1.55;
+  }
+  h1 { margin: 0 0 4px; letter-spacing: -0.02em; }
+  .subtitle { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: 0;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-right: 8px;
+    margin-bottom: 8px;
+  }
+  button:disabled { background: #aaa; cursor: not-allowed; }
+  button:hover:not(:disabled) { filter: brightness(1.1); }
+  .names {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 14px;
+    background: #f4f4f4;
+    padding: 12px;
+    border-radius: 6px;
+    min-height: 200px;
+    white-space: pre-wrap;
+  }
+  .stat {
+    display: inline-block;
+    background: #eef5fb;
+    color: var(--accent);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 600;
+    margin-right: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .you { background: #fef3c7; }
+  code {
+    background: #f4f4f4; padding: 1px 5px; border-radius: 3px; font-size: 13px;
+  }
+  #status { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>microGPT in your browser</h1>
+<p class="subtitle">
+  4,192-parameter transformer compiled from C to WebAssembly. Same trained weights as
+  TALOS-V2's FPGA. Generates plausible names character-by-character via multinomial sampling.
+</p>
+
+<div class="card">
+  <div id="status">Loading WebAssembly module…</div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Generate</h3>
+  <button id="btn-generate" disabled>Generate 20 names</button>
+  <button id="btn-bench" disabled>Benchmark (100K tokens)</button>
+  <div style="margin-top:12px">
+    <span class="stat" id="stat-tps">— tok/sec</span>
+    <span class="stat" id="stat-vs">— vs FPGA</span>
+  </div>
+  <div class="names" id="names-out">Press a button to start.</div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">How this compares</h3>
+  <p style="font-size:13px;color:var(--muted);margin-top:0">
+    Same model, different substrates. The "your browser" row updates after you run the benchmark.
+  </p>
+  <table id="cmp">
+    <thead><tr><th>Implementation</th><th class="num">tok/sec</th><th class="num">vs FPGA</th></tr></thead>
+    <tbody>
+      <tr><td>MLX GPU</td><td class="num">1,865</td><td class="num">0.04×</td></tr>
+      <tr><td>MLX CPU</td><td class="num">3,873</td><td class="num">0.07×</td></tr>
+      <tr><td>pure Python</td><td class="num">4,332</td><td class="num">0.08×</td></tr>
+      <tr><td>NumPy</td><td class="num">24,223</td><td class="num">0.46×</td></tr>
+      <tr><td>TALOS-V2 (FPGA)</td><td class="num">53,000</td><td class="num">1.00×</td></tr>
+      <tr class="you"><td>your browser (WASM)</td><td class="num" id="cmp-tps">—</td><td class="num" id="cmp-vs">—</td></tr>
+      <tr><td>C+NEON Q4.12 (native)</td><td class="num">2,191,219</td><td class="num">41.34×</td></tr>
+      <tr><td>C+NEON fp32 (native)</td><td class="num">3,820,760</td><td class="num">72.09×</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card" style="font-size:13px;color:var(--muted)">
+  <strong>What's running.</strong> The C source for the entire forward pass (~150 lines) is
+  in <code>microgpt_inf.c</code>, compiled with <code>emcc -O3 -msimd128 -ffast-math</code>.
+  Weights are 16,768 bytes of fp32 loaded into the WASM module at startup. The model architecture
+  matches Karpathy's microGPT exactly: <code>n_embd=16, n_head=4, block_size=16, vocab=27</code>,
+  one transformer block. Sampling uses temperature 0.5 multinomial.
+</div>
+
+<script src="./microgpt_inf.js"></script>
+<script>
+(async () => {
+const status = document.getElementById('status');
+const btnGen = document.getElementById('btn-generate');
+const btnBench = document.getElementById('btn-bench');
+const namesOut = document.getElementById('names-out');
+const statTps = document.getElementById('stat-tps');
+const statVs = document.getElementById('stat-vs');
+const cmpTps = document.getElementById('cmp-tps');
+const cmpVs = document.getElementById('cmp-vs');
+
+const FPGA_REF = 53000;
+
+function fmt(n) { return n.toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+
+const Module = await createMicroGPT();
+status.textContent = 'WASM module loaded. Fetching weights…';
+
+const wresp = await fetch('weights.bin');
+const wbuf  = new Uint8Array(await wresp.arrayBuffer());
+status.textContent = `Loaded ${wbuf.length} bytes of weights (${(wbuf.length/4)} fp32 params).`;
+
+// Copy weights into the wasm heap at the buffer the C side allocated.
+const weightsPtr = Module._get_weights_ptr();
+Module.HEAPU8.set(wbuf, weightsPtr);
+Module._init_weights();
+Module._seed_rng(BigInt(Date.now() & 0xFFFFFFFF) || 1n);
+
+btnGen.disabled = false;
+btnBench.disabled = false;
+status.textContent = 'Ready.';
+
+// generate_name fills an int32 buffer and returns the length
+const tokensPtr = Module._malloc(64 * 4);
+
+function generateOneName() {
+  const len = Module._generate_name(20, tokensPtr);
+  let name = '';
+  for (let i = 0; i < len; i++) {
+    const t = Module.HEAP32[(tokensPtr >> 2) + i];
+    name += String.fromCharCode(97 + t);  // 'a' + t
+  }
+  return name;
+}
+
+btnGen.addEventListener('click', () => {
+  const t0 = performance.now();
+  const names = [];
+  let totalChars = 0;
+  for (let i = 0; i < 20; i++) {
+    const n = generateOneName();
+    names.push(`${(i + 1).toString().padStart(2)}. ${n}`);
+    totalChars += n.length + 1;  // +1 for the BOS we generated to terminate
+  }
+  const t1 = performance.now();
+  const tps = totalChars / ((t1 - t0) / 1000);
+  namesOut.textContent = names.join('\n');
+  statTps.textContent = `${fmt(tps)} tok/sec (over ${totalChars} tokens)`;
+  statVs.textContent = `${(tps / FPGA_REF).toFixed(2)}× vs FPGA`;
+});
+
+btnBench.addEventListener('click', () => {
+  btnBench.disabled = true;
+  btnBench.textContent = 'Running…';
+  status.textContent = 'Warming up (10K tokens)…';
+
+  setTimeout(() => {
+    Module._benchmark(10000);
+    status.textContent = 'Benchmarking 100K tokens…';
+
+    setTimeout(() => {
+      const elapsed = Module._benchmark(100000);
+      const tps = 100000 / elapsed;
+      const vs = tps / FPGA_REF;
+      statTps.textContent = `${fmt(tps)} tok/sec`;
+      statVs.textContent = `${vs.toFixed(2)}× vs FPGA`;
+      cmpTps.textContent = fmt(tps);
+      cmpVs.textContent = `${vs.toFixed(2)}×`;
+      namesOut.textContent =
+        `100,000 tokens in ${elapsed.toFixed(3)}s = ${fmt(tps)} tok/sec\n\n` +
+        `That is ${vs.toFixed(2)}× the TALOS-V2 FPGA's 53,000 tok/sec\n` +
+        `and ${(tps/3820760*100).toFixed(1)}% of native C+NEON's 3.82M tok/sec.`;
+      status.textContent = 'Done.';
+      btnBench.disabled = false;
+      btnBench.textContent = 'Benchmark (100K tokens)';
+    }, 50);
+  }, 50);
+});
+
+})();
+</script>
+
+</body>
+</html>

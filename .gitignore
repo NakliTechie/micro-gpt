@@ -1,0 +1,24 @@
+# Build artifacts
+wasm/microgpt_inf.js
+wasm/microgpt_inf.wasm
+wasm/weights.bin
+
+# Third-party clones (not ours to redistribute)
+benchmark/talos-vs-macbook-m5-pro/
+
+# Dataset (large, downloadable from upstream)
+data/names.txt
+
+# Python cruft
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+env/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+*.iml
