@@ -224,6 +224,15 @@
       silicon. The choice of bit-width is constraint-driven, not error-driven.
     </li>
     <li>
+      <strong>WASM throughput depends on the V8 build, not just the binary.</strong>
+      The same <code>microgpt_inf.wasm</code> on the same M4 Pro hardware runs at
+      ~1.34M tok/sec in regular Chrome 145 and ~2.04M tok/sec in Electron 41's bundled
+      Chromium 146 &mdash; a 50% delta from runtime alone. WebAssembly performance is
+      a band per (binary, host) pair, not a single number per machine. The published
+      headline (25.30&times; FPGA) uses the regular-Chrome figure because that is what
+      most readers will see.
+    </li>
+    <li>
       <strong>The educational progression matters more than the architecture.</strong>
       Steps 1&ndash;6 reach NLL 2.21 train / 2.20 val (deduped split). The published TALOS-trained reference reaches 2.26. The
       published microgpt-java reference reaches 2.37. They are all in the same band &mdash; that's a model-capacity

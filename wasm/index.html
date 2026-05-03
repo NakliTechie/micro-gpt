@@ -147,6 +147,16 @@
   one transformer block. Sampling uses temperature 0.5 multinomial.
 </div>
 
+<div class="card" style="font-size:13px;color:var(--muted)">
+  <strong>Heads-up: your number depends on your browser's V8 build.</strong>
+  The same <code>.wasm</code> binary on the same M4 Pro hardware measures
+  ~1.34M tok/sec in regular Chrome 145 and ~2.04M tok/sec in Electron 41's
+  bundled Chromium 146 &mdash; about a 50% delta from the runtime alone.
+  Click <strong>Benchmark</strong> in your own browser to see what your
+  combination of hardware + V8 produces. Both numbers are recorded in
+  <a href="bench_runs.txt" target="_blank"><code>bench_runs.txt</code></a>.
+</div>
+
 <script src="./microgpt_inf.js"></script>
 <script>
 (async () => {
