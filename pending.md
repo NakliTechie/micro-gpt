@@ -3,19 +3,19 @@
 Replication targets for the same 4,192-parameter microGPT model across additional substrates.
 Each one closes a specific data point in the "where does time actually go" map.
 
-## 1. WebAssembly  &mdash; DONE
+## 1. WebAssembly  &mdash; DONE (live at https://naklitechie.github.io/micro-gpt/wasm/)
 
-**Result.** **1,335,113 tok/sec** in Chrome on the M4 Pro &mdash; **25.19&times; the FPGA**, **35% of native C+NEON** (3.82M).
+**Result.** **1,341,206 ± 2,445 tok/sec** in regular Chrome on M4 Pro 24GB &mdash; **25.30&times; the FPGA**,
+**~35% of native C+NEON** (3.82M). Surprise finding: the same `.wasm` measures **2,038,131 tok/sec** in
+Electron-embedded Chromium on the same machine &mdash; ~50% delta from the V8 build alone.
 
-**What this told us.** The "runtime vs compiled" cliff hypothesis was correct: WASM (compiled, JIT-optimized) sits firmly on
-the *fast* side of the cliff, three orders of magnitude above NumPy and MLX. The remaining 65% gap to native C is from
-wasm-simd128 not perfectly mapping to NEON, plus browser sandbox overhead. Names generated match the native quality
-("sona", "kana", "kashi", "dyan").
+**What this told us.** The "runtime vs compiled" cliff hypothesis was correct: WASM sits firmly on the
+*fast* side of the cliff, three orders of magnitude above NumPy and MLX. WebAssembly throughput is a band
+per (binary, host) pair, not a single number per machine.
 
-**Files.** `wasm/microgpt_inf.c`, `wasm/index.html`, `wasm/build.sh`. Open `wasm/index.html` from any modern browser
-(after `python3 -m http.server` from the wasm dir). The artifact is portable &mdash; can host on GitHub Pages.
-
-**Effort.** ~2 hours including emscripten install troubleshooting.
+**Files.** `wasm/microgpt_inf.c`, `wasm/index.html`, `wasm/build.sh`, `wasm/dump_logits.js`,
+`wasm/verify_against_numpy.py`, `wasm/bench_runs.txt`. The verifier loads the built `.wasm` via Node and
+compares logits element-wise against the NumPy reference (max |diff| ~1e-6).
 
 ## 2. Microcontroller deployment  (boards ordered)
 
@@ -64,7 +64,29 @@ This is the most ambitious item on the list and the one that directly answers "c
 
 **Estimated effort.** 2-3 evenings.
 
-## 5. Linux / Raspberry Pi 5 deployment (optional)
+## 5. MLX with `mx.compile` &mdash; can the dispatch overhead be controlled?
+
+**Goal.** Test whether MLX-GPU's loss to pure Python (1,865 tok/sec vs 4,332) is *fundamental* or
+*configurational*. By default MLX is eager &mdash; one kernel launch per op &mdash; and there are ~15 ops per token,
+so per-op launch latency × 15 sets the floor. `mx.compile` fuses the whole graph into one launch per token.
+
+**Why.** The talos-vs-macbook benchmark left this question open. Two distinct outcomes are interesting:
+- **If MLX-GPU jumps to 50-200K tok/sec with `mx.compile`:** the lesson sharpens to "framework dispatch
+  overhead is always *optional* &mdash; you just have to ask for it." Makes the WASM win look less surprising.
+- **If MLX-GPU barely moves:** the lesson sharpens the other way &mdash; "Apple Silicon GPU launch cost is
+  per-token-fundamental, not per-op." Makes the FPGA's deterministic latency look more important.
+
+Either result is publishable. The experiment is cheap (1-line change to `bench_mlx.py` plus warmup) and
+takes one evening.
+
+**Build path.**
+1. Add a `bench_mlx_compiled.py` that wraps the forward pass in `@mx.compile` (and a JIT-warmup phase).
+2. Compare numbers against the existing eager-MLX result; report both.
+3. If the compiled version wins big, also try `mx.compile` with batched parallel streams.
+
+**Estimated effort.** 1 evening.
+
+## 6. Linux / Raspberry Pi 5 deployment (optional)
 
 **Goal.** Run the existing `bench_c` unmodified on a Cortex-A76 with NEON.
 
@@ -76,8 +98,9 @@ This is the most ambitious item on the list and the one that directly answers "c
 
 ## Order of attack
 
-1. WebAssembly (1 evening)  ← starting now
-2. Microcontrollers when boards arrive (1 weekend)
-3. CoreML / ANE (1 evening)
-4. Metal fused-kernel (2-3 evenings)
-5. Pi 5 (drop-in, whenever)
+1. WebAssembly &mdash; **DONE, live**.
+2. **MLX `mx.compile` experiment (1 evening)** &mdash; the next cheap, high-information experiment.
+3. Microcontrollers when boards arrive (1 weekend).
+4. CoreML / ANE (1 evening).
+5. Metal fused-kernel (2-3 evenings).
+6. Pi 5 (drop-in, whenever).
