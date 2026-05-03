@@ -164,11 +164,12 @@
     <tr><td>3. Autograd</td><td>Same model, but graph-based backprop replaces hand-derived gradients</td><td class="num">2.4617</td><td class="num">729</td></tr>
     <tr><td>4. MLP</td><td>Embeddings, 3-character context, hidden layer with tanh</td><td class="num">2.20</td><td class="num">4,009</td></tr>
     <tr><td>5. GPT, 1 head, SGD</td><td>Self-attention + RMSNorm + position embeddings; SGD plateaus</td><td class="num">2.29</td><td class="num">4,240</td></tr>
-    <tr><td>6. GPT, 4 heads, Adam</td><td>Multi-head attention + Adam; same architecture family as TALOS</td><td class="num">2.21 train / 2.22 val</td><td class="num">4,240</td></tr>
+    <tr><td>6. GPT, 4 heads, Adam</td><td>Multi-head attention + Adam; same architecture family as TALOS</td><td class="num">2.21 train / 2.20 val</td><td class="num">4,240</td></tr>
   </tbody>
 </table>
-<p class="footnote">All steps trained from scratch on the same corpus. Step 6 uses a real 90/10 name-level train/val split
-  (see <code>ladder/step6_gpt_multi_head.py</code>); train and val NLL agree to 0.017 — no measurable overfitting.
+<p class="footnote">All steps trained from scratch on the same corpus. Step 6 uses a 90/10 split over <em>unique</em> names
+  (the dataset has 32,033 rows but only 29,494 unique names; deduping before the split prevents leakage); the assertion
+  in the code verifies the train and val name sets are disjoint. Val NLL ≤ train NLL, so no measurable overfitting.
   Step 6 has learnable RMSNorm gains and a final RMSNorm (4,240 params); the TALOS-trained reference used in the WASM
   benchmark has parameter-free RMSNorm and no final norm before the LM head (4,192 params). Same family,
   different parameter count and weights. Both land near NLL 2.2 — a model-capacity floor at this size, not a dataset floor
@@ -224,7 +225,7 @@
     </li>
     <li>
       <strong>The educational progression matters more than the architecture.</strong>
-      Steps 1&ndash;6 reach NLL 2.21 train / 2.22 val. The published TALOS-trained reference reaches 2.26. The
+      Steps 1&ndash;6 reach NLL 2.21 train / 2.20 val (deduped split). The published TALOS-trained reference reaches 2.26. The
       published microgpt-java reference reaches 2.37. They are all in the same band &mdash; that's a model-capacity
       floor at this scale (~4K params), not a dataset floor; larger models do go below 2.0 on this corpus.
       Knowing each component separately is the durable knowledge.

@@ -35,7 +35,7 @@ ladder/                  # 6-step educational walk: bigram → MLP → GPT
   step3_autograd.py      # graph-based backprop (NLL 2.46)
   step4_mlp.py           # embeddings + 3-char context + tanh (NLL 2.20)
   step5_gpt_single_head.py  # self-attention + RMSNorm (NLL 2.29)
-  step6_gpt_multi_head.py   # multi-head + Adam (train 2.21 / val 2.22)
+  step6_gpt_multi_head.py   # multi-head + Adam (train 2.21 / val 2.20, deduped 90/10)
   tensor.py              # autograd library used by steps 4-6
   step6_weights.npz      # our trained weights (4,240 params)
 
@@ -118,9 +118,12 @@ To verify the WASM logits match the NumPy reference within fp32 rounding,
 python3 wasm/verify_against_numpy.py
 ```
 
-This actually loads `wasm/microgpt_inf.wasm` via Node and compares logits
-element-wise against the NumPy reference forward pass. (Requires `node` on
-PATH and the upstream fork's assets from section 2.)
+This actually loads the *built* `wasm/microgpt_inf.wasm` via Node and compares
+logits element-wise against the NumPy reference forward pass. (Requires `node`
+on PATH and the upstream fork's assets from section 2.) Note: the script
+verifies the built artifact, so to catch a regression in `microgpt_inf.c` you
+must `./build.sh` first; the script intentionally does not rebuild for you,
+to keep emscripten an optional dependency for verification-only users.
 
 ### 5. The full report
 
@@ -155,8 +158,8 @@ separate page sessions. CV across runs ≈ 1.4%. Raw data in
 `python3 wasm/verify_against_numpy.py` (from the repo root) compares the live
 WASM logits element-wise against the NumPy reference: max |diff| ≈ 10⁻⁶,
 argmax identical at every autoregressive position checked. The verification
-script actually loads the current `microgpt_inf.wasm` via Node and dumps
-logits, so a regression in the C source would be caught.
+script loads the **built** `microgpt_inf.wasm` (run `./build.sh` after any
+edit to `microgpt_inf.c` to bring the artifact up-to-date before verifying).
 
 ## Influences
 

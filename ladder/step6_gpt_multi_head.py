@@ -186,17 +186,21 @@ def get_lr(step, max_lr=3e-3, warmup=200):
 
 def main():
     rng = np.random.default_rng(42)
-    names = Path("data/names.txt").read_text().splitlines()
+    raw_names = Path("data/names.txt").read_text().splitlines()
+    # names.txt has duplicates (32,033 rows -> 29,494 unique). Dedupe BEFORE
+    # splitting so a name in val cannot have appeared in train under another row.
+    names = sorted(set(n.strip() for n in raw_names if n.strip()))
     rng.shuffle(names)
 
-    # Real train/val split: 90/10. The stream is built per-split so the
-    # validation tokens are drawn only from names the model never trained on.
     split = int(0.9 * len(names))
     train_names, val_names = names[:split], names[split:]
+    # Sanity check: val and train name sets are disjoint by construction
+    assert set(train_names).isdisjoint(set(val_names)), "split leaked names"
     train_stream = build_stream(train_names)
     val_stream = build_stream(val_names)
-    print(f"train stream: {len(train_stream):,} tokens ({len(train_names):,} names)")
-    print(f"val   stream: {len(val_stream):,} tokens ({len(val_names):,} names)")
+    print(f"corpus: {len(raw_names):,} rows -> {len(names):,} unique names")
+    print(f"train stream: {len(train_stream):,} tokens ({len(train_names):,} unique names)")
+    print(f"val   stream: {len(val_stream):,} tokens ({len(val_names):,} unique names)")
 
     p = init_params(rng)
     n_params = sum(t.data.size for t in p.values())
@@ -226,7 +230,7 @@ def main():
     train_nll = estimate_loss(p, train_stream)
     val_nll = estimate_loss(p, val_stream)
     print(f"train NLL: {train_nll:.4f}")
-    print(f"val   NLL: {val_nll:.4f}    <- truly held-out (90/10 name-level split)")
+    print(f"val   NLL: {val_nll:.4f}    <- truly held-out (90/10 unique-name split)")
     print(f"step 5 single-head SGD: 2.29")
     print(f"step 4 MLP baseline:    2.20")
 
