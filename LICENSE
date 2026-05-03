@@ -19,11 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-The MIT license above covers the original code in this repository.
-
-Some bundled assets (notably wasm/weights.bin, derived from the TALOS-V2
-project by Luthira Abeykoon, which has no explicit upstream license) are
-included on a different basis. See NOTICE.md for provenance and terms.
