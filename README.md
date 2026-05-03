@@ -1,11 +1,12 @@
 # micro-gpt across the abstraction stack
 
-> **▶ [Try the live WASM demo](https://NakliTechie.github.io/micro-gpt/wasm/)** &nbsp;·&nbsp;
-> **📊 [Full interactive report](https://NakliTechie.github.io/micro-gpt/report/)** &nbsp;·&nbsp;
-> **🏠 [Overview](https://NakliTechie.github.io/micro-gpt/)**
+> ## ▶ [Try it now in your browser](https://naklitechie.github.io/micro-gpt/wasm/)
 >
-> *(GitHub Pages must be enabled on this repository for those links to resolve. See
-> "Hosting on GitHub Pages" at the end of this README.)*
+> Live WebAssembly demo: generates plausible names character-by-character at ~1.34M tok/sec
+> on Apple M4 Pro. One-click benchmark included.
+>
+> Also: **📊 [Full interactive report](https://naklitechie.github.io/micro-gpt/report/)**
+> &nbsp;·&nbsp; **🏠 [Overview](https://naklitechie.github.io/micro-gpt/)**
 
 A 4,192-parameter transformer (Karpathy's microGPT, character-level, names dataset),
 implemented from scratch in Python and benchmarked across eight substrates:

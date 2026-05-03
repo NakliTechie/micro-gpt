@@ -1,6 +1,6 @@
 # microGPT benchmark on Apple M4 Pro
 
-Hardware: Apple M4 Pro, 14 cores (10 P + 4 E), macOS 15.6.1, clang 17.
+Hardware: Apple M4 Pro (24 GB), 14 cores (10 P + 4 E), macOS 15.6.1, clang 17.
 Model: TALOS-V2 trained microGPT, 4,192 params, n_embd=16, n_head=4, block_size=16.
 
 ## Single-stream throughput

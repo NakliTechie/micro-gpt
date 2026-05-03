@@ -1,5 +1,5 @@
 WASM single-stream throughput: raw run data
-Hardware: Apple M4 Pro, 14 cores (10P + 4E), macOS 15.6.1
+Hardware: Apple M4 Pro (24 GB), 14 cores (10P + 4E), macOS 15.6.1
 Build: emcc 5.0.7, -O3 -msimd128 -ffast-math, -sENVIRONMENT=web,node
 WASM source: wasm/microgpt_inf.c (post RMSNorm-eps fix)
 Methodology: 100,000 forward passes per run, after 20,000-token warmup,
