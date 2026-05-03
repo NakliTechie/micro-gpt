@@ -71,8 +71,6 @@ benchmark/
 report/
   index.html             # interactive Plotly charts of every result
                          # open directly in a browser
-
-pending.md               # planned follow-up substrates
 ```
 
 ## Reproducing
@@ -220,6 +218,17 @@ the demo lives at:
 - `https://<user>.github.io/<repo>/report/` — the report
 
 See [NOTICE.md](NOTICE.md) for the provenance of bundled weights.
+
+## License
+
+The original code in this repository is released under the MIT License
+(see [LICENSE](LICENSE)).
+
+The model weights bundled at `wasm/weights.bin` are derived from
+[TALOS-V2](https://github.com/Luthiraa/TALOS-V2) by Luthira Abeykoon,
+which has no explicit upstream license. They are included on the same
+footing as the public upstream hosting, with attribution. See
+[NOTICE.md](NOTICE.md).
 
 ## Influences
 

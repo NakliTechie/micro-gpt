@@ -23,3 +23,7 @@ env/
 .idea/
 .vscode/
 *.iml
+
+# Internal working notes (kept locally, not for public)
+HANDOFF.md
+pending.md
