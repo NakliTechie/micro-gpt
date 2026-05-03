@@ -10,7 +10,7 @@ emcc -O3 -msimd128 -ffast-math microgpt_inf.c -o microgpt_inf.js \
     -sEXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPF32","HEAPU8","HEAP32"]' \
     -sMODULARIZE=1 -sEXPORT_NAME=createMicroGPT \
     -sALLOW_MEMORY_GROWTH=1 \
-    -sENVIRONMENT=web
+    -sENVIRONMENT=web,node
 
 ls -lh microgpt_inf.{js,wasm} weights.bin
 echo "build ok"

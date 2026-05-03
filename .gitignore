@@ -2,6 +2,7 @@
 wasm/microgpt_inf.js
 wasm/microgpt_inf.wasm
 wasm/weights.bin
+wasm/last_verification.txt
 
 # Third-party clones (not ours to redistribute)
 benchmark/talos-vs-macbook-m5-pro/

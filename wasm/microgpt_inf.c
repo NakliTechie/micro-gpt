@@ -55,9 +55,10 @@ void clear_kv(void) {
 }
 
 static inline void rmsnorm(float *x) {
-    float ss = 1e-5f;
+    // Reference (bench_numpy.py): scale = 1 / sqrt(mean(x*x) + eps)
+    float ss = 0.0f;
     for (int i = 0; i < N_EMBD; i++) ss += x[i] * x[i];
-    float scale = 1.0f / sqrtf(ss / (float)N_EMBD);
+    float scale = 1.0f / sqrtf(ss / (float)N_EMBD + 1e-5f);
     for (int i = 0; i < N_EMBD; i++) x[i] *= scale;
 }
 
@@ -86,7 +87,7 @@ void forward(int tok, int pos, float *logits_out) {
     rmsnorm(x);
 
     memcpy(xr, x, sizeof(x));
-    rmsnorm(x);  // matches the reference forward exactly
+    rmsnorm(x);  // pre-attention norm (reference does the same redundant 2nd norm)
 
     matvec(q,  WQ, x, N_EMBD, N_EMBD);
     matvec(kk, WK, x, N_EMBD, N_EMBD);

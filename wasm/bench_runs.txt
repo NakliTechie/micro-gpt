@@ -1,0 +1,49 @@
+WASM in browser (Chromium 146 / Electron 41.3.0 inside Claude Code preview)
+Hardware: Apple M4 Pro, 14 cores (10P + 4E), macOS 15.6.1
+Build: emcc 5.0.7, -O3 -msimd128 -ffast-math, -sENVIRONMENT=web,node
+WASM source: wasm/microgpt_inf.c (post RMSNorm-eps fix)
+Methodology: 100,000 forward passes per run, after 20,000-token warmup,
+              elapsed time from emscripten_get_now() (wraps performance.now)
+
+------------------------------------------------------------
+Session 1 (2026-05-03 ~20:08, fresh page reload, 5 runs)
+------------------------------------------------------------
+run 1: 1,976,285 tok/sec
+run 2: 2,044,990 tok/sec
+run 3: 2,040,816 tok/sec
+run 4: 2,049,180 tok/sec
+run 5: 2,044,990 tok/sec
+mean:  2,031,252 tok/sec
+CV:    1.36%
+
+------------------------------------------------------------
+Session 2 (2026-05-03 ~20:08, same page, 5 runs)
+------------------------------------------------------------
+run 1: 2,049,180 tok/sec
+run 2: 2,044,990 tok/sec
+run 3: 2,049,180 tok/sec
+run 4: 2,032,520 tok/sec
+run 5: 2,049,180 tok/sec
+mean:  2,045,010 tok/sec
+
+------------------------------------------------------------
+Combined (10 runs)
+------------------------------------------------------------
+mean:  2,038,131 tok/sec
+range: 1,976,285 — 2,049,180
+
+Headline: ~2.04M tok/sec single-stream WASM in browser on M4 Pro.
+Vs FPGA:  ~38.5× the TALOS-V2 reference (53,000 tok/sec).
+Vs native C+NEON:
+   ~53% of the LUT-optimized native (3,820,760 tok/sec); see notes
+   in benchmark/results.md about the LUT precompute asymmetry.
+
+Earlier measurement (pre-rebuild, RMSNorm eps misplaced): 1,341,206 ± 2,445.
+The jump is from a different emcc codegen path triggered by the
+-sENVIRONMENT=web,node build flag, not from the RMSNorm fix itself
+(the fix is arithmetic-equivalent within fp32 precision).
+
+To reproduce:
+   cd wasm && ./build.sh
+   python3 -m http.server 8765
+   # open http://localhost:8765 and click "Benchmark (100K tokens)"

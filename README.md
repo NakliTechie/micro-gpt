@@ -14,12 +14,17 @@ The interesting findings:
 - **The compiled-vs-runtime cliff is real.** Python / NumPy / MLX all sit
   below the FPGA. C+NEON / WASM / TALOS all crush the FPGA. The cliff is
   about three orders of magnitude.
-- **WebAssembly hits 1.34M tok/sec on M4 Pro &mdash; 25.19&times; the FPGA, 35%
-  of native C+NEON.** The browser is a viable inference target for tiny
-  transformers.
-- **The model is 8-bit-equivalent precision.** Per-tensor int8 quantization
-  is statistically lossless. Q4.12 (16-bit, what TALOS uses) carries ~8 bits
-  of unused precision &mdash; chosen for hardware reasons, not accuracy.
+- **WebAssembly hits ~2.04M tok/sec on M4 Pro &mdash; 38× the FPGA, ~53%
+  of a LUT-optimized native C+NEON harness.** The browser is a viable
+  inference target for tiny transformers. (Caveat: the native C+NEON harness
+  precomputes the model's front half into lookup tables outside the timed
+  loop; WASM does that work inside the loop. The comparison is meaningful
+  but not strict apples-to-apples — see [benchmark/results.md](benchmark/results.md).)
+- **The model has at most 8 effective bits of precision.** Per-tensor int8
+  quantization shows no measurable degradation on a 500-name slice
+  (training-corpus eval, no held-out set). Q4.12 (16-bit, what TALOS uses)
+  carries headroom unused by this model's weight distribution &mdash; chosen
+  for hardware reasons, not accuracy.
 
 ## Project layout
 
@@ -30,7 +35,7 @@ ladder/                  # 6-step educational walk: bigram → MLP → GPT
   step3_autograd.py      # graph-based backprop (NLL 2.46)
   step4_mlp.py           # embeddings + 3-char context + tanh (NLL 2.20)
   step5_gpt_single_head.py  # self-attention + RMSNorm (NLL 2.29)
-  step6_gpt_multi_head.py   # multi-head + Adam (NLL 2.21)
+  step6_gpt_multi_head.py   # multi-head + Adam (train 2.21 / val 2.22)
   tensor.py              # autograd library used by steps 4-6
   step6_weights.npz      # our trained weights (4,240 params)
 
@@ -89,8 +94,11 @@ redistribute).
 
 ### 3. The quantization study
 
+`quant/quant_study.py` requires the TALOS-trained weights from the upstream
+fork's assets. Run section 2 (clone + `./run.sh` or just `./download.sh`)
+first so `benchmark/talos-vs-macbook-m5-pro/assets/weights_only.npy` exists.
+
 ```sh
-# (depends on benchmark/talos-vs-macbook-m5-pro/assets being populated)
 python3 quant/quant_study.py
 ```
 
@@ -103,11 +111,16 @@ python3 -m http.server 8765
 # open http://localhost:8765 — generates names, has a benchmark button
 ```
 
-To verify the WASM logits match the NumPy reference within fp32 rounding:
+To verify the WASM logits match the NumPy reference within fp32 rounding,
+**from the repo root**:
 
 ```sh
 python3 wasm/verify_against_numpy.py
 ```
+
+This actually loads `wasm/microgpt_inf.wasm` via Node and compares logits
+element-wise against the NumPy reference forward pass. (Requires `node` on
+PATH and the upstream fork's assets from section 2.)
 
 ### 5. The full report
 
@@ -124,13 +137,26 @@ open report/index.html      # static HTML, no server needed
 | pure Python | 4,332 | 0.08× |
 | NumPy fp32 | 24,223 | 0.46× |
 | **TALOS-V2 (FPGA, 56 MHz)** | **53,000** | **1.00×** |
-| WASM (Chrome) | 1,341,206 ± 2,445 | 25.30× |
-| C+NEON Q4.12 | 2,191,219 | 41.34× |
-| C+NEON fp32 | 3,820,760 | 72.09× |
-| C+NEON ×14 streams (aggregate) | 32,894,149 | 620.6× |
+| WASM (Chromium) ★★ | 2,038,131 ± 20,000 | 38.46× |
+| C+NEON Q4.12 ★ | 2,191,219 | 41.34× |
+| C+NEON fp32 ★ | 3,820,760 | 72.09× |
+| C+NEON ×14 streams (aggregate) ★ | 32,894,149 | 620.6× |
 
-WASM number stable across 5 runs (CV = 0.18%). Logits match NumPy reference
-to max |diff| = 1.3 × 10⁻⁴, argmax identical at every autoregressive position.
+★ The C+NEON harness from upstream `talos-vs-macbook-m5-pro` precomputes
+`(token, pos)` LUTs for the model's front half *outside* the timed loop
+(see [benchmark/results.md](benchmark/results.md)). The WASM port computes
+that work inside the timed loop. The comparison is meaningful but not strict
+apples-to-apples; treat it as "browser WASM vs LUT-optimized native."
+
+★★ Mean of 10 runs of 100,000 tokens each, after 20,000-token warmup, two
+separate page sessions. CV across runs ≈ 1.4%. Raw data in
+[wasm/bench_runs.txt](wasm/bench_runs.txt).
+
+`python3 wasm/verify_against_numpy.py` (from the repo root) compares the live
+WASM logits element-wise against the NumPy reference: max |diff| ≈ 10⁻⁶,
+argmax identical at every autoregressive position checked. The verification
+script actually loads the current `microgpt_inf.wasm` via Node and dumps
+logits, so a regression in the C source would be caught.
 
 ## Influences
 

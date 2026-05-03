@@ -1,75 +1,107 @@
-"""Verify the WASM forward pass produces the same logits as bench_numpy.py.
+"""Live verification: actually run the WASM module under Node, dump logits,
+compare element-wise against the NumPy reference forward pass.
 
-Loads the same weights, runs the same forward pass for the same inputs,
-and reports max abs diff. If the WASM result is real, the diff should be
-sub-1e-3 (only fp32 rounding differences from add ordering).
+If the WASM is silently broken, this script will fail loudly. The earlier
+version of this file compared against pasted literals; that has been replaced
+with `node dump_logits.js` which loads `microgpt_inf.wasm` and `weights.bin`
+fresh on every run.
 """
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 import numpy as np
 
-# Reuse the reference forward exactly as bench_numpy.py defines it.
-sys.path.insert(0, str(Path("../benchmark/talos-vs-macbook-m5-pro").resolve()))
+WASM_DIR = Path(__file__).resolve().parent
+REPO_ROOT = WASM_DIR.parent
+ASSETS = REPO_ROOT / "benchmark/talos-vs-macbook-m5-pro/assets"
+
+if not ASSETS.exists():
+    print("[error] benchmark/talos-vs-macbook-m5-pro/assets/ not found.")
+    print("[error] Clone the upstream fork and run ./download.sh first:")
+    print("[error]   cd benchmark && git clone https://github.com/itsrealranky/talos-vs-macbook-m5-pro.git")
+    print("[error]   cd talos-vs-macbook-m5-pro && ./download.sh")
+    sys.exit(2)
+
+# Load the reference forward exactly as bench_numpy.py defines it
+sys.path.insert(0, str(ASSETS.parent))  # for `from model import ...`
 import importlib.util
+
 spec = importlib.util.spec_from_file_location(
-    "bench_numpy_ref",
-    "../benchmark/talos-vs-macbook-m5-pro/bench_numpy.py",
+    "bench_numpy_ref", ASSETS.parent / "bench_numpy.py",
 )
 ref = importlib.util.module_from_spec(spec)
-# bench_numpy.py imports `model` so we need that on the path
-sys.path.insert(0, "../benchmark/talos-vs-macbook-m5-pro")
 spec.loader.exec_module(ref)
 
-print("=" * 60)
-print("Correctness check: numpy reference vs WASM")
-print("=" * 60)
+# Live-call the WASM via Node
+print("[info] running node wasm/dump_logits.js (live WASM, fresh load)...")
+proc = subprocess.run(
+    ["node", "dump_logits.js"],
+    cwd=WASM_DIR,
+    capture_output=True,
+    text=True,
+    check=False,
+)
+if proc.returncode != 0:
+    print(f"[error] node failed (exit {proc.returncode})")
+    print(proc.stderr)
+    sys.exit(1)
 
-# Logits at tok=BOS=26, pos=0
+wasm_data = json.loads(proc.stdout)
+wasm_first = np.array(wasm_data["first_logits"], dtype=np.float32)
+
+print("=" * 64)
+print("Correctness: NumPy reference vs LIVE WASM (loaded by Node this run)")
+print("=" * 64)
+
+# 1. Logits at tok=BOS=26, pos=0
 K = np.zeros((ref.BLOCK_SIZE, ref.N_EMBD), dtype=np.float32)
 V = np.zeros((ref.BLOCK_SIZE, ref.N_EMBD), dtype=np.float32)
 logits_np = ref.forward(ref.BOS, 0, K, V)
 
-wasm_logits = [
-    1.024986, -0.518191, -0.034956, 0.022252, 0.008249, -1.503535,
-    -1.421363, -0.843298, -0.685915, 0.461157, 0.558786, 0.009492,
-    0.438759, -0.346314, -0.883498, -1.394593, -4.642967, -0.276838,
-    0.322638, -0.344579, -2.205366, -1.177411, -1.963754, -2.716714,
-    -1.107494, -0.297019, -2.501697,
-]
-wasm_logits = np.array(wasm_logits, dtype=np.float32)
-
-diff = np.abs(logits_np - wasm_logits)
-print(f"\nFirst-token logits (tok=BOS, pos=0):")
+diff = np.abs(logits_np - wasm_first)
+print(f"\nFirst-token logits (tok=BOS=26, pos=0):")
 print(f"  numpy max abs:  {np.abs(logits_np).max():.6f}")
-print(f"  wasm  max abs:  {np.abs(wasm_logits).max():.6f}")
+print(f"  wasm  max abs:  {np.abs(wasm_first).max():.6f}")
 print(f"  max |diff|:     {diff.max():.6f}")
 print(f"  mean |diff|:    {diff.mean():.6f}")
 print(f"  argmax(numpy):  {logits_np.argmax()}  (logit={logits_np.max():.4f})")
-print(f"  argmax(wasm):   {wasm_logits.argmax()}  (logit={wasm_logits.max():.4f})")
-print(f"  argmax match:   {logits_np.argmax() == wasm_logits.argmax()}")
+print(f"  argmax(wasm):   {wasm_first.argmax()}  (logit={wasm_first.max():.4f})")
+match = logits_np.argmax() == wasm_first.argmax()
+print(f"  argmax match:   {match}")
+if not match or diff.max() > 1e-3:
+    print("[FAIL] mismatch beyond fp32 rounding tolerance")
+    sys.exit(1)
 
-# Autoregressive trace: feed 'emma' (BOS, e, m, m, a) and check each step's argmax
+# 2. Autoregressive trace: feed 'emma'
 K = np.zeros((ref.BLOCK_SIZE, ref.N_EMBD), dtype=np.float32)
 V = np.zeros((ref.BLOCK_SIZE, ref.N_EMBD), dtype=np.float32)
-seq = [26, 4, 12, 12, 0]  # BOS, e, m, m, a
 print(f"\nAutoregressive trace for 'emma':")
-print(f"  {'pos':>3} {'tok':>3} {'np_max':>8} {'np_arg':>6}  {'wasm_max':>8} {'wasm_arg':>8}  match")
+print(f"  {'pos':>3} {'tok':>3} {'np_max':>8} {'np_arg':>6}  {'wasm_max':>8} {'wasm_arg':>8}  status")
+all_ok = True
+for entry in wasm_data["autoregressive_trace"]:
+    pos, tok = entry["pos"], entry["tok"]
+    wasm_logits = np.array(entry["logits"], dtype=np.float32)
+    np_logits = ref.forward(tok, pos, K, V)
+    np_arg = int(np_logits.argmax())
+    w_arg = int(wasm_logits.argmax())
+    np_max = float(np_logits.max())
+    w_max = float(wasm_logits.max())
+    diff_pos = float(np.abs(np_logits - wasm_logits).max())
+    ok = (np_arg == w_arg) and (diff_pos < 1e-3)
+    all_ok = all_ok and ok
+    print(f"  {pos:>3} {tok:>3} {np_max:>8.4f} {np_arg:>6}  {w_max:>8.4f} {w_arg:>8}  {'OK' if ok else 'FAIL'} (max|d|={diff_pos:.6f})")
 
-# WASM trace from the browser eval
-wasm_trace = [
-    (0, 26, 1.0250, 0),
-    (1, 4,  2.0051, 11),
-    (2, 12, 1.6332, 8),
-    (3, 12, 1.8131, 8),
-    (4, 0,  1.9175, 13),
-]
+# 3. Performance stability
+print(f"\nWASM throughput (5 runs of 100K tokens, after 20K warmup):")
+runs = wasm_data["tps_runs"]
+mean = sum(runs) / len(runs)
+std = (sum((r - mean) ** 2 for r in runs) / len(runs)) ** 0.5
+print(f"  runs:       {[round(r) for r in runs]}")
+print(f"  mean:       {round(mean):,} tok/sec")
+print(f"  std:        {round(std):,} tok/sec")
+print(f"  CV:         {std / mean * 100:.2f}%")
 
-for p in range(len(seq)):
-    logits = ref.forward(seq[p], p, K, V)
-    np_max = float(logits.max())
-    np_arg = int(logits.argmax())
-    _, _, w_max, w_arg = wasm_trace[p]
-    match = "OK" if np_arg == w_arg and abs(np_max - w_max) < 1e-2 else "MISMATCH"
-    print(f"  {p:>3} {seq[p]:>3} {np_max:>8.4f} {np_arg:>6}  {w_max:>8.4f} {w_arg:>8}  {match}")
+print(f"\n{'PASS' if all_ok else 'FAIL'}: live WASM matches NumPy reference within fp32 rounding.")
+sys.exit(0 if all_ok else 1)

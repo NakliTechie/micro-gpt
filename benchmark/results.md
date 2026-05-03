@@ -12,8 +12,19 @@ Model: TALOS-V2 trained microGPT, 4,192 params, n_embd=16, n_head=4, block_size=
 | mlx fp32 (cpu) | 3,873 | 0.07x |
 | mlx fp32 (gpu) | 1,865 | 0.04x |
 | TALOS-V2 (FPGA, 56 MHz) | 53,000 | 1.00x |
-| c fp32+NEON | 3,820,760 | **72.09x** |
-| c Q4.12 fixed-point | 2,191,219 | 41.34x |
+| c fp32+NEON ★ | 3,820,760 | **72.09x** |
+| c Q4.12 fixed-point ★ | 2,191,219 | 41.34x |
+
+★ The C harness in `talos-vs-macbook-m5-pro/bench_c.c:129-147` precomputes a
+27-entry × 16-position LUT covering token+pos embedding, the first two
+RMSNorms, and the Q/K/V projections — roughly the front 20-25% of arithmetic
+per token. That work is done **outside** the timed loop (`bench_c.c:394-397`)
+and the timed step just looks up `(tok, pos) -> (xr, Q, K, V)` at
+`bench_c.c:234-238`. The WASM port (`wasm/microgpt_inf.c`) does not have this
+LUT; it computes the front half every step. So the C+NEON number is
+"LUT-optimized native fp32" while the WASM number is "no-LUT browser fp32" —
+the comparison is meaningful but not strict same-workload. The WASM port
+could be sped up significantly by adding the same LUT.
 
 ## Multi-stream aggregate (NEON)
 

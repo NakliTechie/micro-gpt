@@ -118,10 +118,12 @@
 <div class="card tldr">
   <strong>TL;DR.</strong> For a 4K-parameter transformer, hardware speed is not the bottleneck — framework dispatch is.
   Pure Python is 8% of the FPGA. NumPy is 46%. MLX-GPU is <em>4%</em> — slower than pure Python — because GPU launch overhead
-  is the wrong shape for 4K MACs per token. <strong>WebAssembly in the browser hits 25&times;</strong> the FPGA, 35% of native
-  C+NEON. C+NEON skips the framework entirely and hits 72&times; the FPGA single-stream, 620&times; aggregate. The trained
-  model is also surprisingly compressible: int8 per-tensor quantization is bit-identical to fp32; the FPGA's Q4.12 carries
-  8 bits of unused precision (chosen for hardware reasons, not accuracy).
+  is the wrong shape for 4K MACs per token. <strong>WebAssembly in the browser hits 38&times;</strong> the FPGA, ~53% of a
+  LUT-optimized native C+NEON harness (note: the native harness precomputes the model's front half into lookup tables outside
+  the timed loop; WASM does that work inside the loop, so this is "browser WASM vs LUT-optimized native," not strict apples-to-apples).
+  C+NEON hits 72&times; the FPGA single-stream and 620&times; aggregate. The trained model is also surprisingly compressible:
+  per-tensor int8 quantization gives no measurable degradation on a 500-name slice; the FPGA's Q4.12 carries headroom unused
+  by this model's weight distribution (chosen for hardware reasons, not accuracy).
 </div>
 
 <h2>1 &nbsp; Single-stream throughput</h2>
@@ -139,7 +141,7 @@
     <tr><td>MLX fp32 (GPU)</td><td class="num">1,865</td><td class="num">0.04&times;</td><td>GPU kernel launch latency per op</td></tr>
     <tr><td>NumPy fp32</td><td class="num">24,223</td><td class="num">0.46&times;</td><td>Reduce/dispatch/typecheck (~96% non-math)</td></tr>
     <tr><td>TALOS-V2 (FPGA, 56 MHz)</td><td class="num">53,000</td><td class="num">1.00&times;</td><td>Reference baseline</td></tr>
-    <tr><td>WASM in browser (Chrome, M4 Pro)</td><td class="num">1,335,113</td><td class="num">25.19&times;</td><td>JIT-compiled WASM, 35% of native C+NEON</td></tr>
+    <tr><td>WASM in browser (Chromium, M4 Pro)</td><td class="num">2,038,131</td><td class="num">38.46&times;</td><td>JIT-compiled WASM, ~53% of LUT-optimized native C+NEON; mean of 10 runs (CV ~1%), see <code>wasm/bench_runs.txt</code></td></tr>
     <tr><td>C+NEON Q4.12</td><td class="num">2,191,219</td><td class="num">41.34&times;</td><td>int16 multiply on NEON</td></tr>
     <tr><td>C+NEON fp32</td><td class="num">3,820,760</td><td class="num">72.09&times;</td><td>Whole model + KV cache fits in L1</td></tr>
   </tbody>
@@ -162,16 +164,22 @@
     <tr><td>3. Autograd</td><td>Same model, but graph-based backprop replaces hand-derived gradients</td><td class="num">2.4617</td><td class="num">729</td></tr>
     <tr><td>4. MLP</td><td>Embeddings, 3-character context, hidden layer with tanh</td><td class="num">2.20</td><td class="num">4,009</td></tr>
     <tr><td>5. GPT, 1 head, SGD</td><td>Self-attention + RMSNorm + position embeddings; SGD plateaus</td><td class="num">2.29</td><td class="num">4,240</td></tr>
-    <tr><td>6. GPT, 4 heads, Adam</td><td>Multi-head attention + Adam; matches the TALOS reference</td><td class="num">2.21</td><td class="num">4,240</td></tr>
+    <tr><td>6. GPT, 4 heads, Adam</td><td>Multi-head attention + Adam; same architecture family as TALOS</td><td class="num">2.21 train / 2.22 val</td><td class="num">4,240</td></tr>
   </tbody>
 </table>
-<p class="footnote">All steps trained from scratch on the same corpus. NLL plateau at ~2.2 reflects the dataset's
-  intrinsic structural floor; the published TALOS-trained reference also lands at 2.26.</p>
+<p class="footnote">All steps trained from scratch on the same corpus. Step 6 uses a real 90/10 name-level train/val split
+  (see <code>ladder/step6_gpt_multi_head.py</code>); train and val NLL agree to 0.017 — no measurable overfitting.
+  Step 6 has learnable RMSNorm gains and a final RMSNorm (4,240 params); the TALOS-trained reference used in the WASM
+  benchmark has parameter-free RMSNorm and no final norm before the LM head (4,192 params). Same family,
+  different parameter count and weights. Both land near NLL 2.2 — a model-capacity floor at this size, not a dataset floor
+  (a larger model would dip below).</p>
 
 <h2>4 &nbsp; Quantization study &mdash; how much precision does the model actually need?</h2>
 <p>Trained TALOS-V2 weights, requantized to various Q-formats with per-tensor symmetric scaling
-  (int8 / int4 / int2). NLL measured on the first 500 names. <strong>The model is 8-bit-equivalent</strong> &mdash; per-tensor
-  int8 is statistically identical to fp32; Q4.12 (16-bit) carries ~8 bits of unused precision.</p>
+  (int8 / int4 / int2). NLL measured on the first 500 names of the training corpus. <strong>The model is at most
+  8-bit-effective</strong> &mdash; per-tensor int8 shows no measurable degradation on this slice (NLL drift below
+  the sampling noise floor); Q4.12 (16-bit) carries headroom unused by this model's weight distribution. Note: this is a
+  same-corpus eval, not a held-out set, so it bounds quantization "harm" but doesn't certify it.</p>
 <div id="chart4" class="chart"></div>
 <table>
   <thead><tr><th>Format</th><th class="num">max&nbsp;|err|</th><th class="num">NLL</th><th>Sample quality</th></tr></thead>
@@ -210,15 +218,16 @@
     </li>
     <li>
       <strong>Quantization is for the substrate, not for accuracy.</strong>
-      Per-tensor int8 is statistically lossless on this model. Q4.12 wastes 8 bits of precision because Q4.12 maps
-      cleanly onto a single FPGA DSP block; per-tensor int8 with runtime scale would need extra silicon.
-      The choice of bit-width is constraint-driven, not error-driven.
+      Per-tensor int8 produces no measurable degradation on the 500-name slice scored. Q4.12 carries unused headroom
+      because Q4.12 maps cleanly onto a single FPGA DSP block; per-tensor int8 with runtime scale would need extra
+      silicon. The choice of bit-width is constraint-driven, not error-driven.
     </li>
     <li>
       <strong>The educational progression matters more than the architecture.</strong>
-      Steps 1&ndash;6 reach NLL 2.21. The published TALOS-trained reference reaches 2.26. The published microgpt-java
-      reference reaches 2.37. They are all in the same band &mdash; this dataset has a structural floor near 2.2 that
-      bigger models won't crack. Knowing each component separately is the durable knowledge.
+      Steps 1&ndash;6 reach NLL 2.21 train / 2.22 val. The published TALOS-trained reference reaches 2.26. The
+      published microgpt-java reference reaches 2.37. They are all in the same band &mdash; that's a model-capacity
+      floor at this scale (~4K params), not a dataset floor; larger models do go below 2.0 on this corpus.
+      Knowing each component separately is the durable knowledge.
     </li>
   </ol>
 </div>
@@ -235,7 +244,7 @@ const layoutBase = {
 // --- Chart 1: single-stream throughput, log scale ---
 const c1 = {
   labels: ['MLX (GPU)', 'MLX (CPU)', 'pure Python', 'NumPy', 'TALOS FPGA', 'WASM browser', 'C+NEON Q4.12', 'C+NEON fp32'],
-  values: [1865, 3873, 4332, 24223, 53000, 1335113, 2191219, 3820760],
+  values: [1865, 3873, 4332, 24223, 53000, 2038131, 2191219, 3820760],
 };
 const c1Colors = c1.values.map(v => v >= 53000 ? '#16a34a' : (v >= 24223 ? '#ca8a04' : '#c2410c'));
 Plotly.newPlot('chart1', [{
@@ -391,7 +400,7 @@ Plotly.newPlot('chart5', [{
 // --- Chart 6: vs FPGA ratio horizontal ---
 const c6 = {
   labels: ['MLX GPU', 'MLX CPU', 'pure Python', 'NumPy', 'TALOS FPGA', 'WASM browser', 'C+NEON Q4.12', 'C+NEON fp32', 'C+NEON 14-stream'],
-  ratios: [0.04, 0.07, 0.08, 0.46, 1.0, 25.19, 41.34, 72.09, 620.6],
+  ratios: [0.04, 0.07, 0.08, 0.46, 1.0, 38.46, 41.34, 72.09, 620.6],
 };
 Plotly.newPlot('chart6', [{
   type: 'bar',

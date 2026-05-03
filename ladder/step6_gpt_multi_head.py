@@ -18,6 +18,12 @@ own effective learning rate. Crucial for transformers -- vanilla SGD plateaus
 around 2.30 on this dataset; Adam pushes through to ~2.00.
 
 Plus: LR warmup over the first 200 steps, then constant.
+
+Note: this is an *educational variant* of the microGPT architecture; it has
+learnable RMSNorm gains and a final RMSNorm before the LM head, giving it
+4,240 params. The TALOS-V2 reference model used in the WASM benchmark has
+parameter-free RMSNorm and no final norm before the LM head, giving 4,192
+params. Same family, slightly different parameter count.
 """
 import random
 import sys
@@ -182,8 +188,15 @@ def main():
     rng = np.random.default_rng(42)
     names = Path("data/names.txt").read_text().splitlines()
     rng.shuffle(names)
-    stream = build_stream(names)
-    print(f"stream length: {len(stream):,} tokens")
+
+    # Real train/val split: 90/10. The stream is built per-split so the
+    # validation tokens are drawn only from names the model never trained on.
+    split = int(0.9 * len(names))
+    train_names, val_names = names[:split], names[split:]
+    train_stream = build_stream(train_names)
+    val_stream = build_stream(val_names)
+    print(f"train stream: {len(train_stream):,} tokens ({len(train_names):,} names)")
+    print(f"val   stream: {len(val_stream):,} tokens ({len(val_names):,} names)")
 
     p = init_params(rng)
     n_params = sum(t.data.size for t in p.values())
@@ -195,7 +208,7 @@ def main():
 
     t0 = time.time()
     for step in range(steps):
-        xb, yb = get_batch(stream, batch_size, BLOCK_SIZE, rng)
+        xb, yb = get_batch(train_stream, batch_size, BLOCK_SIZE, rng)
 
         for t in p.values():
             t.grad = np.zeros_like(t.data)
@@ -210,8 +223,10 @@ def main():
             print(f"step {step:5d} | lr {get_lr(step):.4f} | loss {float(loss.data):.4f}")
 
     print(f"\ntraining took {time.time() - t0:.1f}s")
-    held_out = estimate_loss(p, stream)
-    print(f"held-out NLL: {held_out:.4f}")
+    train_nll = estimate_loss(p, train_stream)
+    val_nll = estimate_loss(p, val_stream)
+    print(f"train NLL: {train_nll:.4f}")
+    print(f"val   NLL: {val_nll:.4f}    <- truly held-out (90/10 name-level split)")
     print(f"step 5 single-head SGD: 2.29")
     print(f"step 4 MLP baseline:    2.20")
 
