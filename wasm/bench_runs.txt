@@ -1,49 +1,49 @@
-WASM in browser (Chromium 146 / Electron 41.3.0 inside Claude Code preview)
+WASM single-stream throughput: raw run data
 Hardware: Apple M4 Pro, 14 cores (10P + 4E), macOS 15.6.1
 Build: emcc 5.0.7, -O3 -msimd128 -ffast-math, -sENVIRONMENT=web,node
 WASM source: wasm/microgpt_inf.c (post RMSNorm-eps fix)
 Methodology: 100,000 forward passes per run, after 20,000-token warmup,
               elapsed time from emscripten_get_now() (wraps performance.now)
 
-------------------------------------------------------------
-Session 1 (2026-05-03 ~20:08, fresh page reload, 5 runs)
-------------------------------------------------------------
-run 1: 1,976,285 tok/sec
-run 2: 2,044,990 tok/sec
-run 3: 2,040,816 tok/sec
-run 4: 2,049,180 tok/sec
-run 5: 2,044,990 tok/sec
-mean:  2,031,252 tok/sec
-CV:    1.36%
+The number depends on the browser and host context. Two environments measured:
 
 ------------------------------------------------------------
-Session 2 (2026-05-03 ~20:08, same page, 5 runs)
+Environment A: regular Chrome (typical user-facing number)
 ------------------------------------------------------------
-run 1: 2,049,180 tok/sec
-run 2: 2,044,990 tok/sec
-run 3: 2,049,180 tok/sec
-run 4: 2,032,520 tok/sec
-run 5: 2,049,180 tok/sec
-mean:  2,045,010 tok/sec
+Mean of 5 runs: 1,341,206 tok/sec
+CV:             0.18%
+
+This is what most readers will see when they open the live demo in their
+own browser. Used as the headline number in README and report.
 
 ------------------------------------------------------------
-Combined (10 runs)
+Environment B: Chromium 146 / Electron 41.3.0 inside Claude Code preview
 ------------------------------------------------------------
-mean:  2,038,131 tok/sec
-range: 1,976,285 — 2,049,180
+Session 1 (5 runs):
+  1,976,285 / 2,044,990 / 2,040,816 / 2,049,180 / 2,044,990
+  mean: 2,031,252  CV: 1.36%
 
-Headline: ~2.04M tok/sec single-stream WASM in browser on M4 Pro.
-Vs FPGA:  ~38.5× the TALOS-V2 reference (53,000 tok/sec).
-Vs native C+NEON:
-   ~53% of the LUT-optimized native (3,820,760 tok/sec); see notes
-   in benchmark/results.md about the LUT precompute asymmetry.
+Session 2 (5 runs):
+  2,049,180 / 2,044,990 / 2,049,180 / 2,032,520 / 2,049,180
+  mean: 2,045,010
 
-Earlier measurement (pre-rebuild, RMSNorm eps misplaced): 1,341,206 ± 2,445.
-The jump is from a different emcc codegen path triggered by the
--sENVIRONMENT=web,node build flag, not from the RMSNorm fix itself
-(the fix is arithmetic-equivalent within fp32 precision).
+Combined mean (10 runs): 2,038,131  range: 1,976,285 — 2,049,180
 
-To reproduce:
+The Electron-embedded Chromium runs noticeably faster than a normal Chrome
+browser on the same machine — likely a different V8 build / different
+sandbox / different scheduling. Reported separately; not used as the
+published headline because most readers won't see it.
+
+------------------------------------------------------------
+Numpy reference cross-check (verify_against_numpy.py)
+------------------------------------------------------------
+Verified live by `python3 wasm/verify_against_numpy.py`:
+  - First-token logits: max |diff| ≈ 1e-6, argmax matches
+  - Autoregressive trace ('emma'): all positions match within fp32 noise
+
+------------------------------------------------------------
+To reproduce
+------------------------------------------------------------
    cd wasm && ./build.sh
    python3 -m http.server 8765
-   # open http://localhost:8765 and click "Benchmark (100K tokens)"
+   # open http://localhost:8765 in regular Chrome and click "Benchmark"

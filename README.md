@@ -14,8 +14,10 @@ The interesting findings:
 - **The compiled-vs-runtime cliff is real.** Python / NumPy / MLX all sit
   below the FPGA. C+NEON / WASM / TALOS all crush the FPGA. The cliff is
   about three orders of magnitude.
-- **WebAssembly hits ~2.04M tok/sec on M4 Pro &mdash; 38× the FPGA, ~53%
-  of a LUT-optimized native C+NEON harness.** The browser is a viable
+- **WebAssembly hits ~1.34M tok/sec in regular Chrome on M4 Pro &mdash; 25× the
+  FPGA, ~35% of a LUT-optimized native C+NEON harness.** (Electron-embedded
+  Chromium shows ~2.04M on the same machine — different V8 build; the
+  Chrome number is what most readers will see in their browser.) The browser is a viable
   inference target for tiny transformers. (Caveat: the native C+NEON harness
   precomputes the model's front half into lookup tables outside the timed
   loop; WASM does that work inside the loop. The comparison is meaningful
@@ -140,7 +142,8 @@ open report/index.html      # static HTML, no server needed
 | pure Python | 4,332 | 0.08× |
 | NumPy fp32 | 24,223 | 0.46× |
 | **TALOS-V2 (FPGA, 56 MHz)** | **53,000** | **1.00×** |
-| WASM (Chromium) ★★ | 2,038,131 ± 20,000 | 38.46× |
+| WASM (Chrome) ★★ | 1,341,206 ± 2,445 | 25.30× |
+| WASM (Electron preview) ★★ | 2,038,131 ± 20,000 | 38.46× |
 | C+NEON Q4.12 ★ | 2,191,219 | 41.34× |
 | C+NEON fp32 ★ | 3,820,760 | 72.09× |
 | C+NEON ×14 streams (aggregate) ★ | 32,894,149 | 620.6× |
@@ -151,9 +154,11 @@ open report/index.html      # static HTML, no server needed
 that work inside the timed loop. The comparison is meaningful but not strict
 apples-to-apples; treat it as "browser WASM vs LUT-optimized native."
 
-★★ Mean of 10 runs of 100,000 tokens each, after 20,000-token warmup, two
-separate page sessions. CV across runs ≈ 1.4%. Raw data in
-[wasm/bench_runs.txt](wasm/bench_runs.txt).
+★★ The Chrome number is the headline (mean of 5 runs of 100K tokens each,
+after 20K-token warmup, CV 0.18%). The Electron-embedded Chromium inside
+Claude Code preview measures ~50% faster on the same hardware; recorded
+separately because most readers don't run benchmarks there. Raw data for
+both environments in [wasm/bench_runs.txt](wasm/bench_runs.txt).
 
 `python3 wasm/verify_against_numpy.py` (from the repo root) compares the live
 WASM logits element-wise against the NumPy reference: max |diff| ≈ 10⁻⁶,
