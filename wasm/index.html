@@ -110,27 +110,27 @@
   <table id="cmp">
     <thead><tr><th>Implementation</th><th>Source</th><th class="num">tok/sec</th><th class="num">vs FPGA</th></tr></thead>
     <tbody>
-      <tr><td>MLX GPU</td><td class="src">measured here, M4 Pro (24 GB)</td><td class="num">1,865</td><td class="num">0.04×</td></tr>
-      <tr><td>MLX CPU</td><td class="src">measured here, M4 Pro (24 GB)</td><td class="num">3,873</td><td class="num">0.07×</td></tr>
-      <tr><td>pure Python</td><td class="src">measured here, M4 Pro (24 GB)</td><td class="num">4,332</td><td class="num">0.08×</td></tr>
+      <tr><td>MLX GPU</td><td class="src">measured locally, M4 Pro (24 GB)</td><td class="num">1,865</td><td class="num">0.04×</td></tr>
+      <tr><td>MLX CPU</td><td class="src">measured locally, M4 Pro (24 GB)</td><td class="num">3,873</td><td class="num">0.07×</td></tr>
+      <tr><td>pure Python</td><td class="src">measured locally, M4 Pro (24 GB)</td><td class="num">4,332</td><td class="num">0.08×</td></tr>
       <tr><td>pure Python (M5 Pro)</td><td class="src"><a href="https://github.com/itsrealranky/talos-vs-macbook-m5-pro" target="_blank" rel="noopener">talos-vs-macbook README</a></td><td class="num">8,491</td><td class="num">0.16×</td></tr>
-      <tr><td>NumPy fp32</td><td class="src">measured here, M4 Pro (24 GB)</td><td class="num">24,223</td><td class="num">0.46×</td></tr>
+      <tr><td>NumPy fp32</td><td class="src">measured locally, M4 Pro (24 GB)</td><td class="num">24,223</td><td class="num">0.46×</td></tr>
       <tr><td>NumPy fp32 (M5 Pro)</td><td class="src"><a href="https://github.com/itsrealranky/talos-vs-macbook-m5-pro" target="_blank" rel="noopener">talos-vs-macbook README</a></td><td class="num">47,589</td><td class="num">0.90×</td></tr>
       <tr><td>TALOS-V2 (FPGA, 56 MHz)</td><td class="src"><a href="https://v2.talos.wtf/" target="_blank" rel="noopener">v2.talos.wtf write-up</a> &middot; <a href="https://github.com/Luthiraa/TALOS-V2" target="_blank" rel="noopener">repo</a></td><td class="num">53,000</td><td class="num">1.00×</td></tr>
       <tr><td>WASM browser (M4 Pro 24GB, regular Chrome)</td><td class="src"><a href="bench_runs.txt" target="_blank">bench_runs.txt &middot; raw runs</a></td><td class="num">1,341,206</td><td class="num">25.30×</td></tr>
       <tr><td>WASM browser (M4 Pro 24GB, Electron preview)</td><td class="src"><a href="bench_runs.txt" target="_blank">bench_runs.txt &middot; raw runs</a></td><td class="num">2,038,131</td><td class="num">38.46×</td></tr>
       <tr class="you"><td>your browser (WASM, live)</td><td class="src">live, this page</td><td class="num" id="cmp-tps">—</td><td class="num" id="cmp-vs">—</td></tr>
       <tr><td>C fp32+AVX2 (Intel)</td><td class="src"><a href="https://github.com/vixhal-baraiya/microgpt-c" target="_blank" rel="noopener">microgpt-c README</a></td><td class="num">2,631,689</td><td class="num">49.65×</td></tr>
-      <tr><td>C+NEON Q4.12 (M4 Pro)</td><td class="src">measured here</td><td class="num">2,191,219</td><td class="num">41.34×</td></tr>
+      <tr><td>C+NEON Q4.12 (M4 Pro)</td><td class="src">measured locally, M4 Pro (24 GB)</td><td class="num">2,191,219</td><td class="num">41.34×</td></tr>
       <tr><td>C+NEON Q4.12 (M5 Pro)</td><td class="src"><a href="https://github.com/itsrealranky/talos-vs-macbook-m5-pro" target="_blank" rel="noopener">talos-vs-macbook README</a></td><td class="num">3,373,950</td><td class="num">63.66×</td></tr>
-      <tr><td>C+NEON fp32 (M4 Pro)</td><td class="src">measured here</td><td class="num">3,820,760</td><td class="num">72.09×</td></tr>
+      <tr><td>C+NEON fp32 (M4 Pro)</td><td class="src">measured locally, M4 Pro (24 GB)</td><td class="num">3,820,760</td><td class="num">72.09×</td></tr>
       <tr><td>C+NEON fp32 (M5 Pro)</td><td class="src"><a href="https://github.com/itsrealranky/talos-vs-macbook-m5-pro" target="_blank" rel="noopener">talos-vs-macbook README</a></td><td class="num">6,713,978</td><td class="num">126.68×</td></tr>
-      <tr><td>C+NEON ×14 streams (M4 Pro)</td><td class="src">measured here</td><td class="num">32,894,149</td><td class="num">620.6×</td></tr>
+      <tr><td>C+NEON ×14 streams (M4 Pro)</td><td class="src">measured locally, M4 Pro (24 GB)</td><td class="num">32,894,149</td><td class="num">620.6×</td></tr>
       <tr><td>C+NEON ×18 streams (M5 Pro)</td><td class="src"><a href="https://github.com/itsrealranky/talos-vs-macbook-m5-pro" target="_blank" rel="noopener">talos-vs-macbook README</a></td><td class="num">85,967,850</td><td class="num">1,621.7×</td></tr>
     </tbody>
   </table>
   <p class="footnote" style="font-size:12px;color:var(--muted);margin-top:8px">
-    "Source" indicates whether the number was measured locally on this machine (M4 Pro, 10P+4E)
+    "Source" indicates whether the number was measured locally on the M4 Pro (24 GB, 10P+4E)
     or quoted from the upstream repos as published. <strong>Important caveats:</strong>
     (1) cross-machine numbers (M5 Pro vs M4 Pro) are not apples-to-apples — M5 Pro single-stream
     is roughly 1.5–1.8× M4 Pro due to clock + IPC changes;
