@@ -1,7 +1,7 @@
-# Build artifacts
-wasm/microgpt_inf.js
-wasm/microgpt_inf.wasm
-wasm/weights.bin
+# Build artifacts (committed for GitHub Pages; rerun build.sh to refresh)
+# wasm/microgpt_inf.js
+# wasm/microgpt_inf.wasm
+# wasm/weights.bin
 wasm/last_verification.txt
 
 # Third-party clones (not ours to redistribute)

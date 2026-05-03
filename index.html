@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>micro-gpt across the abstraction stack</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: #1a1a1a;
+    background: #fafafa;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+    line-height: 1.55;
+  }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .subtitle { color: #555; margin: 0 0 28px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: #fff;
+    border: 1px solid #e2e2e2;
+    border-radius: 10px;
+    padding: 20px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.1s, box-shadow 0.1s;
+    display: block;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    border-color: #0a66c2;
+  }
+  .card h2 { margin: 0 0 8px; font-size: 18px; color: #0a66c2; }
+  .card p { margin: 0; color: #555; font-size: 14px; }
+  .findings { background: #fffbe7; border: 1px solid #ebd35a; border-radius: 10px; padding: 16px 20px; margin: 24px 0; }
+  .findings h3 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: #555; }
+  .findings ul { margin: 0; padding-left: 20px; font-size: 14px; }
+  .findings li { margin: 6px 0; }
+  code { background: #f4f4f4; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+  .footer { color: #777; font-size: 13px; margin-top: 32px; padding-top: 20px; border-top: 1px solid #e2e2e2; }
+  .footer a { color: #0a66c2; }
+</style>
+</head>
+<body>
+
+<h1>micro-gpt across the abstraction stack</h1>
+<p class="subtitle">
+  A 4,192-parameter transformer (Karpathy's microGPT) implemented from scratch and benchmarked
+  on eight substrates: pure Python, NumPy, MLX-CPU/GPU, an FPGA, hand-written C+NEON, and
+  WebAssembly running in your browser.
+</p>
+
+<div class="grid">
+  <a class="card" href="wasm/">
+    <h2>▶ Try it now (live WASM demo)</h2>
+    <p>Generates plausible names character-by-character, in your browser, at ~1.34M tok/sec on M4 Pro.
+       Includes a one-click benchmark.</p>
+  </a>
+  <a class="card" href="report/">
+    <h2>📊 Full report (interactive charts)</h2>
+    <p>Six Plotly charts covering throughput, multi-stream scaling, the educational ladder, the
+       quantization study, the NumPy time breakdown, and a vs-FPGA overview.</p>
+  </a>
+</div>
+
+<div class="findings">
+  <h3>Headline findings</h3>
+  <ul>
+    <li><strong>NumPy spends ~96% of wall-clock on dispatch/typecheck overhead</strong>, only ~4% on the actual matmul kernel.</li>
+    <li><strong>MLX-GPU (1,865 tok/sec) loses to pure Python</strong> — GPU launch overhead is the wrong shape for 4K MACs/token.</li>
+    <li><strong>WebAssembly hits 25× the FPGA in regular Chrome</strong>, ~35% of LUT-optimized native C+NEON.</li>
+    <li><strong>The model has at most 8 effective bits of precision.</strong> Per-tensor int8 shows no measurable degradation.</li>
+    <li><strong>Same WASM binary, different V8 builds = ~50% throughput delta.</strong> Chrome 145 vs Electron 41's Chromium 146.</li>
+  </ul>
+</div>
+
+<div class="footer">
+  Source: <a href="https://github.com/NakliTechie/micro-gpt">github.com/NakliTechie/micro-gpt</a>.
+  Built on <a href="https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95">Karpathy's microGPT</a>,
+  <a href="https://v2.talos.wtf/">TALOS-V2</a>'s FPGA architecture, and
+  <a href="https://github.com/itsrealranky/talos-vs-macbook-m5-pro">talos-vs-macbook-m5-pro</a>'s benchmark harness.
+</div>
+
+</body>
+</html>

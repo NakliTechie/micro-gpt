@@ -1,5 +1,12 @@
 # micro-gpt across the abstraction stack
 
+> **▶ [Try the live WASM demo](https://NakliTechie.github.io/micro-gpt/wasm/)** &nbsp;·&nbsp;
+> **📊 [Full interactive report](https://NakliTechie.github.io/micro-gpt/report/)** &nbsp;·&nbsp;
+> **🏠 [Overview](https://NakliTechie.github.io/micro-gpt/)**
+>
+> *(GitHub Pages must be enabled on this repository for those links to resolve. See
+> "Hosting on GitHub Pages" at the end of this README.)*
+
 A 4,192-parameter transformer (Karpathy's microGPT, character-level, names dataset),
 implemented from scratch in Python and benchmarked across eight substrates:
 pure Python, NumPy, MLX-CPU, MLX-GPU, TALOS-V2 FPGA (reference, 56 MHz Cyclone V),
@@ -185,6 +192,33 @@ binary on the same M4 Pro; only the host runtime differs. See
 - **Independent review:** the repo was reviewed by Codex and an
   independent Claude sub-agent before publication; review findings and
   fixes are in the commit history (search `git log --grep=codex`).
+
+## Hosting on GitHub Pages
+
+The `index.html` at the repo root is a small landing page that links to
+the live WASM demo (`wasm/index.html`) and the interactive report
+(`report/index.html`). The committed WASM build artifacts
+(`microgpt_inf.js`, `microgpt_inf.wasm`, `weights.bin`) make the demo
+self-contained — no build step needed for visitors.
+
+**To enable Pages on this repo:**
+
+```sh
+gh api repos/:owner/:repo/pages -X POST \
+  -f 'source[branch]=main' -f 'source[path]=/'
+```
+
+Or via the web UI: Settings → Pages → Source: `main` branch, `/` (root).
+
+Pages on **private** repositories requires GitHub Pro / Team /
+Enterprise. On the free tier, the repo must be public. After enabling,
+the demo lives at:
+
+- `https://<user>.github.io/<repo>/` — the landing page
+- `https://<user>.github.io/<repo>/wasm/` — the live demo
+- `https://<user>.github.io/<repo>/report/` — the report
+
+See [NOTICE.md](NOTICE.md) for the provenance of bundled weights.
 
 ## Influences
 
