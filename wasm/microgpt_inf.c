@@ -12,7 +12,26 @@
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
+
+// Portability: the same file builds under emcc, plain clang --target=wasm32
+// (for A/B kernel tests under Node), and natively (for host-side profiling).
+#if defined(__EMSCRIPTEN__)
 #include <emscripten/emscripten.h>
+#define KEEPALIVE EMSCRIPTEN_KEEPALIVE
+static double now_ms(void) { return emscripten_get_now(); }
+#elif defined(__wasm__)
+#define KEEPALIVE __attribute__((used, visibility("default")))
+double microgpt_now_ms(void);  // imported from the JS host
+static double now_ms(void) { return microgpt_now_ms(); }
+#else
+#include <time.h>
+#define KEEPALIVE
+static double now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec * 1e3 + (double)ts.tv_nsec / 1e6;
+}
+#endif
 
 #define VOCAB_SIZE 27
 #define BLOCK_SIZE 16
@@ -32,28 +51,6 @@ static const float *LM;
 static float K_cache[BLOCK_SIZE * N_EMBD];
 static float V_cache[BLOCK_SIZE * N_EMBD];
 
-EMSCRIPTEN_KEEPALIVE
-float* get_weights_ptr(void) { return weights_buf; }
-
-EMSCRIPTEN_KEEPALIVE
-void init_weights(void) {
-    WTE = weights_buf;
-    WPE = WTE + 27 * 16;
-    WQ  = WPE + 16 * 16;
-    WK  = WQ  + 16 * 16;
-    WV  = WK  + 16 * 16;
-    WO  = WV  + 16 * 16;
-    W1  = WO  + 16 * 16;
-    W2  = W1  + 64 * 16;
-    LM  = W2  + 16 * 64;
-}
-
-EMSCRIPTEN_KEEPALIVE
-void clear_kv(void) {
-    memset(K_cache, 0, sizeof(K_cache));
-    memset(V_cache, 0, sizeof(V_cache));
-}
-
 static inline void rmsnorm(float *x) {
     // Reference (bench_numpy.py): scale = 1 / sqrt(mean(x*x) + eps)
     float ss = 0.0f;
@@ -72,15 +69,22 @@ static inline void matvec(float *y, const float *W, const float *x, int out_dim,
     }
 }
 
-// Single-token forward. Updates K[pos], V[pos]. Writes 27-dim logits.
-EMSCRIPTEN_KEEPALIVE
-void forward(int tok, int pos, float *logits_out) {
-    float x[N_EMBD], xr[N_EMBD];
-    float q[N_EMBD], kk[N_EMBD], vv[N_EMBD];
-    float head_out[N_EMBD];
-    float h[MLP_HIDDEN];
-    float wo_out[N_EMBD], w2_out[N_EMBD];
+// Front-of-network LUT, ported from the native C+NEON harness
+// (talos-vs-macbook-m5-pro/bench_c.c:129-147). The front of the forward pass
+// -- tok+pos embedding, both RMSNorms, and the Q/K/V projections -- depends
+// only on (tok, pos), so all 27 x 16 combinations are precomputed once at
+// init and the per-token step becomes a lookup. Entry layout per (tok, pos):
+// [xr(16) | q(16) | k(16) | v(16)], built with the exact same arithmetic as
+// the live path, so logits are bit-identical with the LUT on or off.
+// Disable with -DMICROGPT_NO_LUT for A/B benchmarking.
+#define LUT_STRIDE (4 * N_EMBD)
+#ifndef MICROGPT_NO_LUT
+static float front_lut[VOCAB_SIZE * BLOCK_SIZE * LUT_STRIDE];
+#endif
 
+static void embed_norm_qkv(int tok, int pos,
+                           float *xr, float *q, float *kk, float *vv) {
+    float x[N_EMBD];
     for (int i = 0; i < N_EMBD; i++) {
         x[i] = WTE[tok * N_EMBD + i] + WPE[pos * N_EMBD + i];
     }
@@ -92,8 +96,60 @@ void forward(int tok, int pos, float *logits_out) {
     matvec(q,  WQ, x, N_EMBD, N_EMBD);
     matvec(kk, WK, x, N_EMBD, N_EMBD);
     matvec(vv, WV, x, N_EMBD, N_EMBD);
+}
+
+KEEPALIVE
+float* get_weights_ptr(void) { return weights_buf; }
+
+KEEPALIVE
+void init_weights(void) {
+    WTE = weights_buf;
+    WPE = WTE + 27 * 16;
+    WQ  = WPE + 16 * 16;
+    WK  = WQ  + 16 * 16;
+    WV  = WK  + 16 * 16;
+    WO  = WV  + 16 * 16;
+    W1  = WO  + 16 * 16;
+    W2  = W1  + 64 * 16;
+    LM  = W2  + 16 * 64;
+
+#ifndef MICROGPT_NO_LUT
+    for (int tok = 0; tok < VOCAB_SIZE; tok++) {
+        for (int pos = 0; pos < BLOCK_SIZE; pos++) {
+            float *e = &front_lut[(tok * BLOCK_SIZE + pos) * LUT_STRIDE];
+            embed_norm_qkv(tok, pos, e, e + N_EMBD, e + 2 * N_EMBD, e + 3 * N_EMBD);
+        }
+    }
+#endif
+}
+
+KEEPALIVE
+void clear_kv(void) {
+    memset(K_cache, 0, sizeof(K_cache));
+    memset(V_cache, 0, sizeof(V_cache));
+}
+
+// Single-token forward. Updates K[pos], V[pos]. Writes 27-dim logits.
+KEEPALIVE
+void forward(int tok, int pos, float *logits_out) {
+    float x[N_EMBD], xr[N_EMBD];
+    float head_out[N_EMBD];
+    float h[MLP_HIDDEN];
+    float wo_out[N_EMBD], w2_out[N_EMBD];
+
+#ifdef MICROGPT_NO_LUT
+    float q[N_EMBD], kk[N_EMBD], vv[N_EMBD];
+    embed_norm_qkv(tok, pos, xr, q, kk, vv);
     memcpy(&K_cache[pos * N_EMBD], kk, sizeof(kk));
     memcpy(&V_cache[pos * N_EMBD], vv, sizeof(vv));
+#else
+    // LUT fast path: (tok, pos) -> precomputed (xr, Q, K, V)
+    const float *e = &front_lut[(tok * BLOCK_SIZE + pos) * LUT_STRIDE];
+    memcpy(xr, e, N_EMBD * sizeof(float));
+    const float *q = e + N_EMBD;
+    memcpy(&K_cache[pos * N_EMBD], e + 2 * N_EMBD, N_EMBD * sizeof(float));
+    memcpy(&V_cache[pos * N_EMBD], e + 3 * N_EMBD, N_EMBD * sizeof(float));
+#endif
 
     const float inv_sqrt_hd = 1.0f / sqrtf((float)HEAD_DIM);
     const int seq_len = pos + 1;
@@ -149,12 +205,12 @@ static inline double uniform(void) {
     return (xorshift() >> 11) * (1.0 / 9007199254740992.0);
 }
 
-EMSCRIPTEN_KEEPALIVE
+KEEPALIVE
 void seed_rng(uint64_t s) { rng_state = s ? s : 1; }
 
 // Generate one full name (until BOS or max_len). Writes character ids to
 // out_tokens, returns length. Temperature-0.5 multinomial sampling.
-EMSCRIPTEN_KEEPALIVE
+KEEPALIVE
 int generate_name(int max_len, int *out_tokens) {
     clear_kv();
     float logits[VOCAB_SIZE];
@@ -194,14 +250,14 @@ int generate_name(int max_len, int *out_tokens) {
 
 // Benchmark: run n_tokens single-token forwards (resetting every time we
 // hit BOS or the block boundary) and return total elapsed time in seconds.
-EMSCRIPTEN_KEEPALIVE
+KEEPALIVE
 double benchmark(int n_tokens) {
     clear_kv();
     float logits[VOCAB_SIZE];
     int tok = BOS;
     int pos = 0;
 
-    double t0 = emscripten_get_now();
+    double t0 = now_ms();
     for (int step = 0; step < n_tokens; step++) {
         if (pos >= BLOCK_SIZE) {
             clear_kv();
@@ -236,6 +292,6 @@ double benchmark(int n_tokens) {
             pos++;
         }
     }
-    double t1 = emscripten_get_now();
+    double t1 = now_ms();
     return (t1 - t0) / 1000.0;  // ms -> s
 }

@@ -20,11 +20,27 @@ Model: TALOS-V2 trained microGPT, 4,192 params, n_embd=16, n_head=4, block_size=
 RMSNorms, and the Q/K/V projections — roughly the front 20-25% of arithmetic
 per token. That work is done **outside** the timed loop (`bench_c.c:394-397`)
 and the timed step just looks up `(tok, pos) -> (xr, Q, K, V)` at
-`bench_c.c:234-238`. The WASM port (`wasm/microgpt_inf.c`) does not have this
-LUT; it computes the front half every step. So the C+NEON number is
-"LUT-optimized native fp32" while the WASM number is "no-LUT browser fp32" —
-the comparison is meaningful but not strict same-workload. The WASM port
-could be sped up significantly by adding the same LUT.
+`bench_c.c:234-238`. The WASM port (`wasm/microgpt_inf.c`) now carries the
+same LUT (built once in `init_weights()`, ~108 KB; disable with
+`-DMICROGPT_NO_LUT` for A/B runs), so the two are same-workload again.
+
+### LUT port speedup (Intel Xeon 2.10 GHz, 4-core container)
+
+Measured with the `-DMICROGPT_NO_LUT` toggle, same source, same flags
+(`-O3 -msimd128 -ffast-math` for wasm32 via clang 18 + wasm-ld, run under
+Node 22 / V8; `-O3 -ffast-math` native), median of 5 × 2M-token runs,
+3 interleaved rounds:
+
+| Build | no-LUT tok/sec | LUT tok/sec | speedup |
+| --- | ---: | ---: | ---: |
+| wasm32 under Node 22 (V8) | ~524,000 | ~665,000 | **1.27×** |
+| native x86-64 scalar | ~918,000 | ~1,168,000 | **1.27×** |
+
+Logits are bit-identical with the LUT on and off (the LUT is built with the
+exact arithmetic of the live path), and match the previous emscripten build
+to fp32 tolerance. The shipped `microgpt_inf.wasm`/`.js` and the M4 Pro
+browser numbers above are still pre-LUT; rerun `wasm/build.sh` (emcc) and
+re-measure in Chrome to update them.
 
 ## Multi-stream aggregate (NEON)
 

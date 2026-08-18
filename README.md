@@ -172,9 +172,11 @@ Static HTML, no server needed. Six interactive Plotly charts.
 
 ★ The C+NEON harness from upstream `talos-vs-macbook-m5-pro` precomputes
 `(token, pos)` LUTs for the model's front half *outside* the timed loop.
-The WASM port computes that work inside the timed loop. The comparison is
-meaningful but not strict apples-to-apples; treat it as "browser WASM vs
-LUT-optimized native." See [benchmark/results.md](benchmark/results.md).
+The same LUT has since been ported to `wasm/microgpt_inf.c` (built at init,
+logits bit-identical, measured 1.27× in V8 — see
+[benchmark/results.md](benchmark/results.md)); the WASM rows above are
+still pre-LUT measurements of the shipped binary and need an `emcc`
+rebuild + re-run on the M4 Pro to update.
 
 ★★ The WASM number depends on the V8 build. Both rows are the same `.wasm`
 binary on the same M4 Pro; only the host runtime differs. See
